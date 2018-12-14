@@ -45,7 +45,6 @@ class ClickhouseCompressionTester(object):
     def list_columns(self, dbtable):
         db, table = dbtable.split('.')
         rows = self.run("SELECT name FROM system.columns WHERE database = '{}' AND table = '{}'".format(db, table))
-        print(list(rows))
         return sorted([r[0] for r in rows])
 
     def list_tables(self, db):
@@ -291,11 +290,11 @@ if __name__ == "__main__":
             How to use:
 
             1. analyze table columns
-                ./order-by-shaker.py -a -f db.src_table -t tmp_db.prefix
-            2. sort table using index from provided columns:
-                ./order-by-shaker.py -s db.src_table -o tmp_db.prefix:user_id,event_time -p event_time cookies.name cookies.value
-            3. compare resulting tables
-                ./order-by-shaker.py -c 'tmp_db.prefix*'
+                ./order-by-shaker.py -a -f db.table -t tmp_analyze.prefix
+            2. sort table using index from provided columns (will take long time):
+                ./order-by-shaker.py -s db.table -o tmp_sorted.prefix:user_id,event_time -p url status code
+            3. compare resulting tables:
+                ./order-by-shaker.py -c 'tmp_sorted.prefix*'
         """)
     )
     # parser.add_argument(
