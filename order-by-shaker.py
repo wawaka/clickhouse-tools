@@ -6,20 +6,16 @@ import fnmatch
 import argparse
 import itertools
 import collections
+import textwrap
 
 from pprint import pprint as pp
 
 import clickhouse_driver
 from beautifultable import BeautifulTable
 
-# how to use
-# 1. analyze table columns ./order-by-shaker.py --analyze --from-db-table db.src_table --to-db-table tmp_db.dst
-# 2. sort table ./order-by-shaker.py --sort db.src_table -o tmp_db.prefix:user_id,event_time -p event_time cookies.name cookies.value
-# 3. compare tables ./order-by-shaker.py --compare 'tmp_db.prefix*'
-
 
 def make_column_abbr(name):
-    return ''.join(tok[0].upper() for tok in name.replace('.', '_').split('_'))
+    return ''.join(tok[0].upper() for tok in name.replace('.', '_').split('_') if tok)
 
 
 def hrsize(n):
@@ -37,7 +33,7 @@ def P(n):
 class ClickhouseCompressionTester(object):
     def __init__(self, args):
         self.args = args
-        self.clickhouse_client = clickhouse_driver.Client('localhost')
+        self.clickhouse_client = clickhouse_driver.Client(args.host)
 
     def __del__(self):
         self.clickhouse_client.disconnect()
@@ -49,6 +45,7 @@ class ClickhouseCompressionTester(object):
     def list_columns(self, dbtable):
         db, table = dbtable.split('.')
         rows = self.run("SELECT name FROM system.columns WHERE database = '{}' AND table = '{}'".format(db, table))
+        print(list(rows))
         return sorted([r[0] for r in rows])
 
     def list_tables(self, db):
@@ -270,6 +267,9 @@ class ClickhouseCompressionTester(object):
         print(beautiful_table)
 
 
+class NoModeSpecified(Exception): pass
+
+
 def main(args):
     cct = ClickhouseCompressionTester(args)
 
@@ -280,39 +280,60 @@ def main(args):
     if args.analyze:
         return cct.do_analyze()
 
+    raise NoModeSpecified
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        add_help = False,
+        formatter_class = argparse.RawDescriptionHelpFormatter,
+        epilog = textwrap.dedent("""\
+            How to use:
+
+            1. analyze table columns
+                ./order-by-shaker.py -a -f db.src_table -t tmp_db.prefix
+            2. sort table using index from provided columns:
+                ./order-by-shaker.py -s db.src_table -o tmp_db.prefix:user_id,event_time -p event_time cookies.name cookies.value
+            3. compare resulting tables
+                ./order-by-shaker.py -c 'tmp_db.prefix*'
+        """)
+    )
     # parser.add_argument(
     #     '-m', '--mode',
     #     required = True,
     #     choices = ['analyze', 'compare', 'sort'],
     # )
     parser.add_argument(
+        '-h', '--host',
+        default = 'localhost',
+        help = 'Clickhouse host to connect to',
+    )
+    parser.add_argument(
         '-a', '--analyze',
         action = 'store_true',
-        # required = True,
+        help = 'Boolean flag for analyze mode. Example: {} -a -f db.table -t tmp.prefix'.format(parser.prog),
     )
     parser.add_argument(
         '-f', '--from-db-table',
-        # required = True,
     )
     parser.add_argument(
         '-t', '--to-db-table',
-        # required = True,
     )
     parser.add_argument(
         '-l', '--limit',
         type = int,
+        help = 'Use limit when selecting data from table.'
     )
     parser.add_argument(
         '-s', '--sort',
+        help = 'Sort columns in table. Output to -o'
         # nargs = '*',
         # type = lambda i: i.split(','),
     )
     parser.add_argument(
         '-c', '--compare',
         nargs = '*',
+        help = 'List of db.table values to compare. Masks allowed. Example: db.prefix_*'
         # type = lambda t: t.split(','),
     )
     parser.add_argument(
@@ -324,9 +345,13 @@ if __name__ == "__main__":
         '-p', '--permutations',
         default = [],
         nargs = '*',
+        help = 'List of columns to try ordering for.'
         # type = lambda t: t.split(','),
     )
 
     args = parser.parse_args()
-    print("args: {}".format(args))
-    main(args)
+    # print("args: {}".format(args))
+    try:
+        main(args)
+    except NoModeSpecified:
+        parser.print_help()
